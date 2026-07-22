@@ -21,10 +21,9 @@ There are no tests or linters configured.
 ## How it works
 
 - `steam_reviews.py` fetches up to 2 pages (200 reviews) of recent reviews from `https://store.steampowered.com/appreviews/<appid>` using cursor pagination.
-- Dedup state is kept in `seen_<APPID>.json` (a JSON list of recommendation IDs) in the current working directory. On first run (no seen-file), it seeds the file silently without posting, to avoid spamming old reviews.
+- Dedup state is kept in `seen_<APPID>.json` (a JSON list of recommendation IDs) in `STEAM_REVIEWS_STATE_DIR` (created if missing; defaults to the current working directory). On first run (no seen-file), it seeds the file silently without posting, to avoid spamming old reviews.
 - New reviews are posted oldest-first as Discord embeds (green/red by verdict).
 
 ## Gotchas
 
-- The Jenkinsfile defines `STEAM_REVIEWS_STATE_DIR`, but the script does not read it — the seen-file is always written to the working directory. Keep this in mind if changing state handling.
 - One seen-file per app ID; to track more games, add more `bat 'python steam_reviews.py <appid>'` lines in the Jenkinsfile.

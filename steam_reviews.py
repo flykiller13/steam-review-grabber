@@ -4,7 +4,8 @@ from pathlib import Path
 
 APPID = sys.argv[1] if len(sys.argv) > 1 else os.environ["STEAM_APPID"]
 WEBHOOK = os.environ["DISCORD_WEBHOOK_URL"]
-SEEN_FILE = Path(f"seen_{APPID}.json")
+STATE_DIR = Path(os.environ.get("STEAM_REVIEWS_STATE_DIR", "."))
+SEEN_FILE = STATE_DIR / f"seen_{APPID}.json"
 
 def fetch_recent(appid, pages=2):
     reviews, cursor = [], "*"
@@ -46,8 +47,12 @@ def main():
         resp = requests.post(WEBHOOK, json=payload, timeout=15)
         resp.raise_for_status()
 
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
     SEEN_FILE.write_text(json.dumps(sorted(seen)))
-    print(f"{len(new)} new review(s)")
+    if first_run:
+        print(f"first run: seeded {len(new)} review(s), nothing posted")
+    else:
+        print(f"{len(new)} new review(s) posted")
 
 if __name__ == "__main__":
     main()
