@@ -2,10 +2,11 @@
 import json, os, sys, requests
 from pathlib import Path
 
-APPID = sys.argv[1] if len(sys.argv) > 1 else os.environ["STEAM_APPID"]
+# Each arg is "appid=Game Name" (or a bare appid, then the id doubles as the name).
+RAW_ARGS = sys.argv[1:] or os.environ["STEAM_APPID"].split(",")
+GAMES = [(a.split("=", 1)[0], a.split("=", 1)[1] if "=" in a else a) for a in RAW_ARGS]
 WEBHOOK = os.environ["DISCORD_WEBHOOK_URL"]
 STATE_DIR = Path(os.environ.get("STEAM_REVIEWS_STATE_DIR", "."))
-SEEN_FILE = STATE_DIR / f"seen_{APPID}.json"
 
 def fetch_recent(appid, pages=2):
     reviews, cursor = [], "*"
@@ -24,11 +25,12 @@ def fetch_recent(appid, pages=2):
             break
     return reviews
 
-def main():
-    seen = set(json.loads(SEEN_FILE.read_text())) if SEEN_FILE.exists() else set()
-    first_run = not SEEN_FILE.exists()
+def process_game(appid, name):
+    seen_file = STATE_DIR / f"seen_{appid}.json"
+    seen = set(json.loads(seen_file.read_text())) if seen_file.exists() else set()
+    first_run = not seen_file.exists()
 
-    new = [rv for rv in fetch_recent(APPID) if rv["recommendationid"] not in seen]
+    new = [rv for rv in fetch_recent(appid) if rv["recommendationid"] not in seen]
 
     for rv in reversed(new):  # oldest first
         seen.add(rv["recommendationid"])
@@ -38,21 +40,32 @@ def main():
         text = rv["review"][:1000] + ("…" if len(rv["review"]) > 1000 else "")
         payload = {
             "embeds": [{
-                "title": f"{verdict} — {rv['author']['playtime_forever'] // 60}h played",
+                "title": f"{name}: {verdict} — {rv['author']['playtime_forever'] // 60}h played",
                 "description": text,
                 "color": 0x57F287 if rv["voted_up"] else 0xED4245,
-                "footer": {"text": f"App {APPID} • helpful votes: {rv['votes_up']}"},
+                "footer": {"text": f"{name} (app {appid}) • helpful votes: {rv['votes_up']}"},
             }]
         }
         resp = requests.post(WEBHOOK, json=payload, timeout=15)
         resp.raise_for_status()
 
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    SEEN_FILE.write_text(json.dumps(sorted(seen)))
+    seen_file.write_text(json.dumps(sorted(seen)))
     if first_run:
-        print(f"first run: seeded {len(new)} review(s), nothing posted")
+        print(f"{name} ({appid}): first run, seeded {len(new)} review(s), nothing posted")
     else:
-        print(f"{len(new)} new review(s) posted")
+        print(f"{name} ({appid}): {len(new)} new review(s) posted")
+
+def main():
+    failed = []
+    for appid, name in GAMES:
+        try:
+            process_game(appid, name)
+        except Exception as e:
+            print(f"{name} ({appid}): FAILED: {e}", file=sys.stderr)
+            failed.append(name)
+    if failed:
+        sys.exit(f"failed for: {', '.join(failed)}")
 
 if __name__ == "__main__":
     main()

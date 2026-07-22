@@ -10,11 +10,11 @@ A single-script Python job that polls the Steam store's review API for a game an
 
 ```
 pip install requests
-python steam_reviews.py <appid>
+python steam_reviews.py "<appid>=<Game Name>" ["<appid>=<Game Name>" ...]
 ```
 
-- The app ID comes from argv[1], falling back to the `STEAM_APPID` env var.
-- `DISCORD_WEBHOOK_URL` env var is required (in Jenkins it comes from the `discord-reviews-webhook` credential).
+- Each arg is an `appid=Game Name` pair (a bare appid also works; the id is then used as the display name). With no args, it falls back to the `STEAM_APPID` env var (comma-separated).
+- `DISCORD_WEBHOOK_URL` env var is required (in Jenkins it comes from the `discord-reviews-webhook` credential). All games post to the same webhook/channel; the game name is shown in each embed.
 
 There are no tests or linters configured.
 
@@ -26,4 +26,5 @@ There are no tests or linters configured.
 
 ## Gotchas
 
-- One seen-file per app ID; to track more games, add more `bat 'python steam_reviews.py <appid>'` lines in the Jenkinsfile.
+- One seen-file per app ID. Games are processed independently: a failure for one game is logged and the rest still run; the script exits non-zero at the end if any game failed.
+- The Jenkinsfile has a boolean parameter per game (default true, so cron runs cover all games) plus a `games` map of param key → [appid, name]. To add a game, add both a `booleanParam` and a map entry.
