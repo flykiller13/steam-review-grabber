@@ -18,7 +18,7 @@ pipeline {
         }
         stage('Fetch & post reviews') {
             steps {
-                bat 'python steam_reviews.py 123456'
+                bat 'python steam_reviews.py 4163030'
                 // bat 'python steam_reviews.py 789012'  // add more games here
             }
         }
