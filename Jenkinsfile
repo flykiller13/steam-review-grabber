@@ -1,5 +1,5 @@
 pipeline {
-    agent { label 'windows' }   // match whatever label your Windows agent(s) use
+    agent any
 
     triggers {
         cron('H */6 * * *')
