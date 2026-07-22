@@ -1,4 +1,5 @@
 pipeline {
+    agent { label 'windows' }   // match whatever label your Windows agent(s) use
 
     triggers {
         cron('H */6 * * *')
@@ -12,7 +13,7 @@ pipeline {
     stages {
         stage('Setup') {
             steps {
-                bat 'python -m pip install --quiet requests'
+                bat 'python -m pip install requests'
             }
         }
         stage('Fetch & post reviews') {
