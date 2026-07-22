@@ -25,6 +25,15 @@ def fetch_recent(appid, pages=2):
             break
     return reviews
 
+def translate(text):
+    r = requests.get(
+        "https://translate.googleapis.com/translate_a/single",
+        params={"client": "gtx", "sl": "auto", "tl": "en", "dt": "t", "q": text},
+        timeout=15,
+    )
+    r.raise_for_status()
+    return "".join(chunk[0] for chunk in r.json()[0])
+
 def process_game(appid, name):
     seen_file = STATE_DIR / f"seen_{appid}.json"
     seen = set(json.loads(seen_file.read_text())) if seen_file.exists() else set()
@@ -38,6 +47,12 @@ def process_game(appid, name):
             continue  # seed the seen-file silently, don't spam 200 old reviews
         verdict = "👍 Recommended" if rv["voted_up"] else "👎 Not Recommended"
         text = rv["review"][:1000] + ("…" if len(rv["review"]) > 1000 else "")
+        if rv.get("language") != "english":
+            try:  # best-effort: post the original untranslated on any failure
+                text += f"\n\n🌐 {translate(text)[:1000]}"
+            except Exception as e:
+                print(f"{name} ({appid}): translation failed for "
+                      f"{rv['recommendationid']}: {e}", file=sys.stderr)
         payload = {
             "embeds": [{
                 "title": f"{name}: {verdict} — {rv['author']['playtime_forever'] // 60}h played",
