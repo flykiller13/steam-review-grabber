@@ -7,8 +7,8 @@ pipeline {
 
     environment {
         DISCORD_WEBHOOK_URL = credentials('discord-reviews-webhook')
-        // Comma-separated "appid=Game Name" pairs, e.g. "123456=My Game,234567=Other Game"
-        STEAM_APPID = credentials('steam-games')
+        // Secret-file credential holding games.json (see README for the format)
+        STEAM_GAMES_FILE = credentials('steam-games-file')
         STEAM_REVIEWS_STATE_DIR = 'C:\\Jenkins\\data\\steam_reviews'
     }
 

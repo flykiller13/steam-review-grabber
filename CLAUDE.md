@@ -10,11 +10,11 @@ A single-script Python job that polls the Steam store's review API for a game an
 
 ```
 pip install requests
-python steam_reviews.py "<appid>=<Game Name>" ["<appid>=<Game Name>" ...]
+python steam_reviews.py [path/to/games.json]
 ```
 
-- Each arg is an `appid=Game Name` pair (a bare appid also works; the id is then used as the display name), with an optional third field routing that game to its own destination: a full webhook URL (separate channel) or a numeric thread ID (thread in the default webhook's channel, sent via Discord's `?thread_id=` webhook parameter). The trailing field is only treated as a destination if it starts with `http` or is all digits, so names containing `=` still parse. With no args, it falls back to the `STEAM_APPID` env var (comma-separated).
-- `DISCORD_WEBHOOK_URL` env var is the default destination (in Jenkins it comes from the `discord-reviews-webhook` credential); it's only required if at least one game doesn't specify its own webhook URL. The game name is shown in each embed.
+- Config is a JSON list of game objects: `appid` (required), `name` (display name, defaults to the appid), `webhook` (per-game Discord webhook URL) and `thread_id` (thread within the target webhook's channel, sent via Discord's `?thread_id=` webhook parameter) are optional. Path comes from the first CLI arg, else the `STEAM_GAMES_FILE` env var, else `./games.json`. See the README for an example.
+- `DISCORD_WEBHOOK_URL` env var is the default destination (in Jenkins it comes from the `discord-reviews-webhook` credential); it's only required if at least one game doesn't specify its own `webhook`. The game name is shown in each embed.
 
 There are no tests or linters configured.
 
@@ -27,4 +27,5 @@ There are no tests or linters configured.
 ## Gotchas
 
 - One seen-file per app ID. Games are processed independently: a failure for one game is logged and the rest still run; the script exits non-zero at the end if any game failed.
-- The Jenkinsfile contains no game-specific data (this is a template repo). The game list comes from the `steam-games` Jenkins secret-text credential, exposed as `STEAM_APPID`: comma-separated `appid=Game Name` pairs, each optionally suffixed with `=<webhook url>` or `=<thread id>` for a per-game destination. To add a game or change where it posts, edit that credential in Jenkins — no repo change needed.
+- The Jenkinsfile contains no game-specific data (this is a template repo). `games.json` lives in the `steam-games-file` Jenkins secret-file credential, exposed as the `STEAM_GAMES_FILE` path. To add a game or change where it posts, re-upload that credential's file in Jenkins — no repo change needed.
+- The config can contain webhook URLs and Jenkins does not mask secret-file *contents* in logs, so the script must never print anything from the config except app IDs and names (this is why the Discord post error avoids `raise_for_status`, whose message includes the URL).

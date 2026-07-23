@@ -10,39 +10,41 @@ Polls the Steam store review API for one or more games and posts new reviews to 
 
 ## Jenkins setup
 
-1. **Create a Discord webhook** for the target channel (Channel settings → Integrations → Webhooks) and copy its URL.
-2. **Add two credentials** in Jenkins (Manage Jenkins → Credentials), both of kind *Secret text*:
+1. **Create a Discord webhook** for each target channel (Channel settings → Integrations → Webhooks) and copy its URL.
+2. **Write a `games.json`** describing the games — a JSON list, one object per game:
 
-   | ID | Value |
-   |----|-------|
-   | `discord-reviews-webhook` | The Discord webhook URL (default destination) |
-   | `steam-games` | Comma-separated `appid=Game Name` pairs, e.g. `123456=My Game,234567=Other Game` |
+   ```json
+   [
+     { "appid": 123456, "name": "My Game",
+       "webhook": "https://discord.com/api/webhooks/111/aaa",
+       "thread_id": "9876543210987654321" },
+     { "appid": 234567, "name": "Other Game" }
+   ]
+   ```
 
-   The app ID is the number in a game's Steam store URL (`store.steampowered.com/app/<appid>/...`).
+   - `appid` (required) — the number in the game's Steam store URL (`store.steampowered.com/app/<appid>/...`).
+   - `name` — display name shown in the embeds; defaults to the app ID.
+   - `webhook` — that game's Discord webhook URL; defaults to the `discord-reviews-webhook` credential.
+   - `thread_id` — posts into that thread of the target webhook's channel (right-click the thread → Copy Thread ID, requires Developer Mode). The thread must already exist and not be archived.
+3. **Add two credentials** in Jenkins (Manage Jenkins → Credentials):
 
-### Per-game channels or threads
+   | ID | Kind | Value |
+   |----|------|-------|
+   | `steam-games-file` | Secret file | The `games.json` file |
+   | `discord-reviews-webhook` | Secret text | Default webhook URL — only needed if some game has no `webhook` of its own |
 
-Each `steam-games` entry accepts an optional third field that routes that game's reviews to its own destination:
+   The config lives only in the credential store; because webhook URLs inside it are not individually masked by Jenkins, the script never prints anything from it except app IDs and names.
+4. **Create a Pipeline job** pointing at this repository (Pipeline script from SCM). The `Jenkinsfile` runs the script every ~6 hours via cron.
+5. The agent needs **Python 3** with `pip` on its `PATH`. Dependencies (`requests`) are installed by the job itself.
+6. Optionally adjust `STEAM_REVIEWS_STATE_DIR` in the `Jenkinsfile` — the directory where the seen-review state files are kept (default `C:\Jenkins\data\steam_reviews`). It must persist between builds; don't point it inside the workspace.
 
-- `appid=Game Name=<webhook url>` — posts to that webhook's channel (create a webhook per channel).
-- `appid=Game Name=<thread id>` — posts to that thread inside the default webhook's channel (right-click the thread → Copy Thread ID, requires Developer Mode). The thread must already exist and not be archived.
-- `appid=Game Name` — posts to the default webhook, as before. The three forms can be mixed.
-
-Example: `123456=My Game=https://discord.com/api/webhooks/111/aaa,234567=Other Game=9876543210987654321`
-
-A trailing field only counts as a destination if it's a URL or all digits, so game names containing `=` still work. `discord-reviews-webhook` is only required if at least one entry lacks its own webhook URL.
-3. **Create a Pipeline job** pointing at this repository (Pipeline script from SCM). The `Jenkinsfile` runs the script every ~6 hours via cron.
-4. The agent needs **Python 3** with `pip` on its `PATH`. Dependencies (`requests`) are installed by the job itself.
-5. Optionally adjust `STEAM_REVIEWS_STATE_DIR` in the `Jenkinsfile` — the directory where the seen-review state files are kept (default `C:\Jenkins\data\steam_reviews`). It must persist between builds; don't point it inside the workspace.
-
-To add or remove a game later, just edit the `steam-games` credential — no code changes needed.
+To add or remove a game later, update the `steam-games-file` credential (delete and re-upload the file) — no code changes needed.
 
 ## Running locally
 
 ```
 pip install requests
-set DISCORD_WEBHOOK_URL=<webhook url>
-python steam_reviews.py "123456=My Game" "234567=Other Game"
+python steam_reviews.py path\to\games.json
 ```
 
-Game args can also come from a `STEAM_APPID` env var (same comma-separated format) instead of the command line, and take the same optional per-game destination third field described above. State files are written to the current directory unless `STEAM_REVIEWS_STATE_DIR` is set.
+The config path can also come from the `STEAM_GAMES_FILE` env var; with neither, `games.json` in the current directory is used. Set `DISCORD_WEBHOOK_URL` if any game omits its `webhook`. State files are written to the current directory unless `STEAM_REVIEWS_STATE_DIR` is set.

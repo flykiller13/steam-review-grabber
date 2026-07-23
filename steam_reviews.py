@@ -2,34 +2,27 @@
 import json, os, sys, requests
 from pathlib import Path
 
-# Each arg is "appid=Game Name" (or a bare appid, then the id doubles as the name),
-# optionally with a per-game destination: "appid=Game Name=<webhook url>" posts to
-# that webhook's channel, "appid=Game Name=<thread id>" posts to that thread of the
-# default webhook's channel. Without a destination, the default webhook is used.
-RAW_ARGS = sys.argv[1:] or os.environ["STEAM_APPID"].split(",")
+# Config is a JSON list of games: [{"appid": 123456, "name": "My Game",
+# "webhook": "https://discord.com/api/webhooks/...", "thread_id": "987..."}, ...]
+# Only "appid" is required. "webhook" defaults to DISCORD_WEBHOOK_URL; "thread_id"
+# routes into a thread of the target webhook's channel. The config may contain
+# webhook URLs, so nothing from it except appid/name is ever printed.
+CONFIG_PATH = Path(sys.argv[1] if len(sys.argv) > 1
+                   else os.environ.get("STEAM_GAMES_FILE", "games.json"))
 DEFAULT_WEBHOOK = os.environ.get("DISCORD_WEBHOOK_URL")
 STATE_DIR = Path(os.environ.get("STEAM_REVIEWS_STATE_DIR", "."))
 
-def parse_game(arg):
-    parts = arg.split("=")
-    # Only a trailing webhook URL or all-digit thread ID counts as a destination,
-    # so game names containing "=" still parse as before.
-    target = None
-    if len(parts) > 2 and (parts[-1].startswith("http") or parts[-1].isdigit()):
-        target = parts.pop()
-    return parts[0], "=".join(parts[1:]) or parts[0], target
+GAMES = json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
 
-GAMES = [parse_game(a) for a in RAW_ARGS]
-
-def webhook_for(target):
-    if target and target.startswith("http"):
-        return target
-    if not DEFAULT_WEBHOOK:
-        raise RuntimeError("DISCORD_WEBHOOK_URL is not set and no per-game webhook given")
-    if target:  # thread ID within the default webhook's channel
-        sep = "&" if "?" in DEFAULT_WEBHOOK else "?"
-        return f"{DEFAULT_WEBHOOK}{sep}thread_id={target}"
-    return DEFAULT_WEBHOOK
+def webhook_for(game):
+    url = game.get("webhook") or DEFAULT_WEBHOOK
+    if not url:
+        raise RuntimeError("no per-game webhook and DISCORD_WEBHOOK_URL is not set")
+    thread = game.get("thread_id")
+    if thread:
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}thread_id={thread}"
+    return url
 
 def fetch_recent(appid, pages=2):
     reviews, cursor = [], "*"
@@ -85,7 +78,8 @@ def process_game(appid, name, webhook):
             }]
         }
         resp = requests.post(webhook, json=payload, timeout=15)
-        resp.raise_for_status()
+        if not resp.ok:  # no raise_for_status: its message would leak the webhook URL
+            raise RuntimeError(f"Discord returned {resp.status_code}: {resp.text[:300]}")
 
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     seen_file.write_text(json.dumps(sorted(seen)))
@@ -96,9 +90,11 @@ def process_game(appid, name, webhook):
 
 def main():
     failed = []
-    for appid, name, target in GAMES:
+    for game in GAMES:
+        appid = str(game["appid"]).strip()
+        name = game.get("name") or appid
         try:
-            process_game(appid, name, webhook_for(target))
+            process_game(appid, name, webhook_for(game))
         except Exception as e:
             print(f"{name} ({appid}): FAILED: {e}", file=sys.stderr)
             failed.append(name)
