@@ -27,4 +27,4 @@ There are no tests or linters configured.
 ## Gotchas
 
 - One seen-file per app ID. Games are processed independently: a failure for one game is logged and the rest still run; the script exits non-zero at the end if any game failed.
-- The Jenkinsfile has a boolean parameter per game (default true, so cron runs cover all games) plus a `games` map of param key → [appid, name]. To add a game, add both a `booleanParam` and a map entry.
+- The Jenkinsfile contains no game-specific data (this is a template repo). The game list comes from the `steam-games` Jenkins secret-text credential, exposed as `STEAM_APPID`: comma-separated `appid=Game Name` pairs. To add a game, edit that credential in Jenkins — no repo change needed.
