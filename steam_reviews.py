@@ -7,7 +7,15 @@ from pathlib import Path
 # Only "appid" is required. "webhook" defaults to DISCORD_WEBHOOK_URL; "thread_id"
 # routes into a thread of the target webhook's channel. The config may contain
 # webhook URLs, so nothing from it except appid/name is ever printed.
-CONFIG_PATH = Path(sys.argv[1] if len(sys.argv) > 1
+# --test [N]: repost the N (default 1) newest reviews per game without reading
+# or writing the seen-files, for testing the posting pipeline repeatably.
+_argv = sys.argv[1:]
+TEST_N = None
+if "--test" in _argv:
+    _i = _argv.index("--test")
+    _argv.pop(_i)
+    TEST_N = int(_argv.pop(_i)) if _i < len(_argv) and _argv[_i].isdigit() else 1
+CONFIG_PATH = Path(_argv[0] if _argv
                    else os.environ.get("STEAM_GAMES_FILE", "games.json"))
 DEFAULT_WEBHOOK = os.environ.get("DISCORD_WEBHOOK_URL")
 STATE_DIR = Path(os.environ.get("STEAM_REVIEWS_STATE_DIR", "."))
@@ -52,10 +60,13 @@ def translate(text):
 
 def process_game(appid, name, webhook):
     seen_file = STATE_DIR / f"seen_{appid}.json"
-    seen = set(json.loads(seen_file.read_text())) if seen_file.exists() else set()
-    first_run = not seen_file.exists()
-
-    new = [rv for rv in fetch_recent(appid) if rv["recommendationid"] not in seen]
+    if TEST_N is not None:
+        seen, first_run = set(), False
+        new = fetch_recent(appid)[:TEST_N]
+    else:
+        seen = set(json.loads(seen_file.read_text())) if seen_file.exists() else set()
+        first_run = not seen_file.exists()
+        new = [rv for rv in fetch_recent(appid) if rv["recommendationid"] not in seen]
 
     for rv in reversed(new):  # oldest first
         seen.add(rv["recommendationid"])
@@ -81,6 +92,9 @@ def process_game(appid, name, webhook):
         if not resp.ok:  # no raise_for_status: its message would leak the webhook URL
             raise RuntimeError(f"Discord returned {resp.status_code}: {resp.text[:300]}")
 
+    if TEST_N is not None:
+        print(f"{name} ({appid}): TEST MODE: posted {len(new)} review(s), seen-file untouched")
+        return
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     seen_file.write_text(json.dumps(sorted(seen)))
     if first_run:

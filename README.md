@@ -48,3 +48,11 @@ python steam_reviews.py path\to\games.json
 ```
 
 The config path can also come from the `STEAM_GAMES_FILE` env var; with neither, `games.json` in the current directory is used. Set `DISCORD_WEBHOOK_URL` if any game omits its `webhook`. State files are written to the current directory unless `STEAM_REVIEWS_STATE_DIR` is set.
+
+### Test mode
+
+```
+python steam_reviews.py --test [N] [path\to\games.json]
+```
+
+Reposts the `N` (default 1) newest reviews for each configured game without reading or writing the seen-files, so it's repeatable and leaves the dedup state untouched. To avoid posting into the real channel, point it at a local config whose games use a throwaway webhook.

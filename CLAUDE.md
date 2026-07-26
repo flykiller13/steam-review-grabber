@@ -14,6 +14,7 @@ python steam_reviews.py [path/to/games.json]
 ```
 
 - Config is a JSON list of game objects: `appid` (required), `name` (display name, defaults to the appid), `webhook` (per-game Discord webhook URL) and `thread_id` (thread within the target webhook's channel, sent via Discord's `?thread_id=` webhook parameter) are optional. Path comes from the first CLI arg, else the `STEAM_GAMES_FILE` env var, else `./games.json`. See the README for an example.
+- `--test [N]` reposts the N (default 1) newest reviews per game without reading or writing the seen-files — repeatable posting test that leaves dedup state untouched.
 - `DISCORD_WEBHOOK_URL` env var is the default destination (in Jenkins it comes from the `discord-reviews-webhook` credential); it's only required if at least one game doesn't specify its own `webhook`. The game name is shown in each embed.
 
 There are no tests or linters configured.
