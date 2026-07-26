@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, os, sys, requests
+import difflib, json, os, sys, requests
 from pathlib import Path
 
 # Config is a JSON list of games: [{"appid": 123456, "name": "My Game",
@@ -49,6 +49,19 @@ def fetch_recent(appid, pages=2):
             break
     return reviews
 
+LANGUAGE_TAGS = {
+    "arabic": ("ar", "🇸🇦"), "bulgarian": ("bg", "🇧🇬"), "schinese": ("zh-CN", "🇨🇳"),
+    "tchinese": ("zh-TW", "🇹🇼"), "czech": ("cs", "🇨🇿"), "danish": ("da", "🇩🇰"),
+    "dutch": ("nl", "🇳🇱"), "finnish": ("fi", "🇫🇮"), "french": ("fr", "🇫🇷"),
+    "german": ("de", "🇩🇪"), "greek": ("el", "🇬🇷"), "hungarian": ("hu", "🇭🇺"),
+    "italian": ("it", "🇮🇹"), "japanese": ("ja", "🇯🇵"), "koreana": ("ko", "🇰🇷"),
+    "norwegian": ("no", "🇳🇴"), "polish": ("pl", "🇵🇱"), "portuguese": ("pt", "🇵🇹"),
+    "brazilian": ("pt-BR", "🇧🇷"), "romanian": ("ro", "🇷🇴"), "russian": ("ru", "🇷🇺"),
+    "spanish": ("es", "🇪🇸"), "latam": ("es-LA", "🌎"), "swedish": ("sv", "🇸🇪"),
+    "thai": ("th", "🇹🇭"), "turkish": ("tr", "🇹🇷"), "ukrainian": ("uk", "🇺🇦"),
+    "vietnamese": ("vi", "🇻🇳"),
+}
+
 def translate(text):
     r = requests.get(
         "https://translate.googleapis.com/translate_a/single",
@@ -73,19 +86,26 @@ def process_game(appid, name, webhook):
         if first_run:
             continue  # seed the seen-file silently, don't spam 200 old reviews
         verdict = "👍 Recommended" if rv["voted_up"] else "👎 Not Recommended"
-        text = rv["review"][:1000] + ("…" if len(rv["review"]) > 1000 else "")
+        text = rv["review"][:2000] + ("…" if len(rv["review"]) > 2000 else "")
         if rv.get("language") != "english":
+            code, flag = LANGUAGE_TAGS.get(rv.get("language"), (rv.get("language"), "🌐"))
             try:  # best-effort: post the original untranslated on any failure
-                text += f"\n\n🌐 {translate(text)[:1000]}"
+                translated = translate(text)[:2000]
+                similarity = difflib.SequenceMatcher(
+                    None, text.lower(), translated.lower()).ratio()
+                if similarity < 0.95:
+                    text += f"\n\n*{flag} translated from {code}:*\n{translated}"
             except Exception as e:
                 print(f"{name} ({appid}): translation failed for "
                       f"{rv['recommendationid']}: {e}", file=sys.stderr)
+        playtime_hours = rv["author"]["playtime_forever"] / 60
+        playtime_str = f"{playtime_hours:.1f}" if playtime_hours < 10 else f"{playtime_hours:.0f}"
         payload = {
             "embeds": [{
-                "title": f"{name}: {verdict} — {rv['author']['playtime_forever'] // 60}h played",
+                "title": f"{verdict} — {playtime_str}h played",
                 "description": text,
                 "color": 0x57F287 if rv["voted_up"] else 0xED4245,
-                "footer": {"text": f"{name} (app {appid}) • helpful votes: {rv['votes_up']}"},
+                "footer": {"text": f"app {appid}"},
             }]
         }
         resp = requests.post(webhook, json=payload, timeout=15)
