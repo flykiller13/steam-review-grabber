@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import difflib, json, os, sys, requests
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Config is a JSON list of games: [{"appid": 123456, "name": "My Game",
@@ -100,12 +101,21 @@ def process_game(appid, name, webhook):
                       f"{rv['recommendationid']}: {e}", file=sys.stderr)
         playtime_hours = rv["author"]["playtime_forever"] / 60
         playtime_str = f"{playtime_hours:.1f}" if playtime_hours < 10 else f"{playtime_hours:.0f}"
+        steamid = rv["author"]["steamid"]
+        profile_url = f"https://steamcommunity.com/profiles/{steamid}"
+        if rv.get("received_for_free"):
+            verdict += " 🎁 (received for free)"
+        footer = (f"app {appid} • {rv['author']['num_games_owned']} games owned, "
+                  f"{rv['author']['num_reviews']} reviews")
         payload = {
             "embeds": [{
+                "author": {"name": steamid, "url": profile_url},
                 "title": f"{verdict} — {playtime_str}h played",
                 "description": text,
                 "color": 0x57F287 if rv["voted_up"] else 0xED4245,
-                "footer": {"text": f"app {appid}"},
+                "footer": {"text": footer},
+                "timestamp": datetime.fromtimestamp(
+                    rv["timestamp_created"], tz=timezone.utc).isoformat(),
             }]
         }
         resp = requests.post(webhook, json=payload, timeout=15)
