@@ -105,8 +105,11 @@ def process_game(appid, name, webhook):
         profile_url = f"https://steamcommunity.com/profiles/{steamid}"
         if rv.get("received_for_free"):
             verdict += " 🎁 (received for free)"
-        footer = (f"app {appid} • {rv['author']['num_games_owned']} games owned, "
-                  f"{rv['author']['num_reviews']} reviews")
+        posted = datetime.fromtimestamp(rv["timestamp_created"], tz=timezone.utc)
+        games_owned = rv["author"]["num_games_owned"]
+        owned_clause = f"{games_owned} games owned, " if games_owned else ""
+        footer = (f"{name} • {owned_clause}{rv['author']['num_reviews']} reviews • "
+                  f"{posted.strftime('%b %d, %Y %H:%M UTC')}")
         payload = {
             "embeds": [{
                 "author": {"name": steamid, "url": profile_url},
@@ -114,8 +117,6 @@ def process_game(appid, name, webhook):
                 "description": text,
                 "color": 0x57F287 if rv["voted_up"] else 0xED4245,
                 "footer": {"text": footer},
-                "timestamp": datetime.fromtimestamp(
-                    rv["timestamp_created"], tz=timezone.utc).isoformat(),
             }]
         }
         resp = requests.post(webhook, json=payload, timeout=15)
